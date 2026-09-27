@@ -1,0 +1,157 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EmailStatus {
+  SCHEDULED
+  SENDING
+  SENT
+  FAILED
+}
+
+enum OutboxTopic {
+  SEND_EMAIL
+  INDEX_EMAIL
+  NOTIFY_SLACK
+}
+
+enum OutboxStatus {
+  PENDING
+  LEASED
+  PUBLISHED
+  DEAD
+}
+
+model User {
+  id             String             @id @default(cuid())
+  googleSubject  String             @unique
+  email          String
+  name           String
+  avatarUrl      String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  senders        EmailSender[]
+  batches        EmailBatch[]
+  slackInstall   SlackInstallation?
+
+  @@index([email])
+  @@map("users")
+}
+
+model EmailSender {
+  id                    String       @id @default(cuid())
+  ownerId               String
+  label                 String
+  emailAddress          String
+  smtpHost              String
+  smtpPort              Int
+  smtpSecure            Boolean      @default(false)
+  smtpUsername          String
+  passwordCiphertext    String
+  passwordNonce         String
+  passwordAuthTag       String
+  enabled               Boolean      @default(true)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  owner                 User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  batches               EmailBatch[]
+
+  @@unique([ownerId, emailAddress])
+  @@index([ownerId, enabled])
+  @@map("email_senders")
+}
+
+model EmailBatch {
+  id                    String       @id @default(cuid())
+  ownerId               String
+  senderId              String
+  idempotencyKey        String
+  requestHash           String
+  subject               String
+  body                  String       @db.Text
+  startsAt              DateTime
+  delayBetweenMs        Int
+  hourlyLimit           Int
+  recipientCount        Int
+  createdAt             DateTime     @default(now())
+  owner                 User         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  sender                EmailSender  @relation(fields: [senderId], references: [id], onDelete: Restrict)
+  emails                ScheduledEmail[]
+
+  @@unique([ownerId, idempotencyKey])
+  @@index([ownerId, createdAt])
+  @@map("email_batches")
+}
+
+model ScheduledEmail {
+  id                    String       @id @default(cuid())
+  batchId               String
+  sequence              Int
+  recipient             String
+  recipientKey          String
+  scheduledAt           DateTime
+  status                EmailStatus  @default(SCHEDULED)
+  attempts              Int          @default(0)
+  startedAt             DateTime?
+  smtpSubmissionStartedAt DateTime?
+  sentAt                DateTime?
+  providerMessageId     String?
+  previewUrl            String?
+  failureCode           String?
+  failureMessage        String?      @db.Text
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  batch                 EmailBatch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  outboxEvents          OutboxEvent[]
+
+  @@unique([batchId, sequence])
+  @@unique([batchId, recipientKey])
+  @@index([status, scheduledAt])
+  @@index([status, startedAt])
+  @@index([batchId, status])
+  @@map("scheduled_emails")
+}
+
+model OutboxEvent {
+  id                    String       @id @default(cuid())
+  emailId               String?
+  topic                 OutboxTopic
+  idempotencyKey        String       @unique
+  payload               Json
+  status                OutboxStatus @default(PENDING)
+  attempts              Int          @default(0)
+  availableAt           DateTime     @default(now())
+  lockedAt              DateTime?
+  lockedBy              String?
+  publishedAt           DateTime?
+  lastError             String?      @db.Text
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  email                 ScheduledEmail? @relation(fields: [emailId], references: [id], onDelete: Cascade)
+
+  @@index([status, availableAt])
+  @@index([emailId, topic])
+  @@map("outbox_events")
+}
+
+model SlackInstallation {
+  id                    String       @id @default(cuid())
+  ownerId               String       @unique
+  teamId                String?
+  teamName              String?
+  channelId             String?
+  channelName           String?
+  webhookCiphertext     String
+  webhookNonce          String
+  webhookAuthTag        String
+  installedAt           DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  owner                 User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@map("slack_installations")
+}

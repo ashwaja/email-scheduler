@@ -1,0 +1,24 @@
+{
+  "name": "reachinbox-email-scheduler",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @scheduler/contracts && npm run build --workspace @scheduler/api && npm run build --workspace @scheduler/web",
+    "typecheck": "npm run typecheck --workspace @scheduler/contracts && npm run typecheck --workspace @scheduler/api && npm run typecheck --workspace @scheduler/web",
+    "test": "npm run test --workspaces --if-present",
+    "dev:api": "npm run build --workspace @scheduler/contracts && npm run dev --workspace @scheduler/api",
+    "dev:dispatcher": "npm run build --workspace @scheduler/contracts && npm run dispatcher --workspace @scheduler/api",
+    "dev:worker": "npm run build --workspace @scheduler/contracts && npm run worker --workspace @scheduler/api",
+    "dev:web": "npm run build --workspace @scheduler/contracts && npm run dev --workspace @scheduler/web",
+    "db:generate": "npm run db:generate --workspace @scheduler/api",
+    "db:migrate": "npm run db:migrate --workspace @scheduler/api"
+  },
+  "devDependencies": {
+    "typescript": "~5.8.3"
+  }
+}
